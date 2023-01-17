@@ -29,6 +29,7 @@ from typing import List
 import subprocess
 import os
 import logging
+import tempfile
 
 networks = {
     'testnet': ['--testnet-magic', '1097911063'],
@@ -42,6 +43,42 @@ node_socket_env = {
 }
 
 logger = logging.getLogger('command')
+
+class TempFile:
+    """
+    Create temporary files using the 'with' statement to ensure they get removed
+    after use.  Supporting two main use cases:
+
+    1.  Initialize a temporary file with content for use as input to a command
+        with TempFile(initial_content) as initial_content_file:
+            result = run_command(initial_content_file.name)
+            ...
+
+    2.  Retrieve output from a command that writes to file
+        with TempFile() as output_file:
+            write_somethign_to(output_file.name)
+            result = output_file.read()
+            ...
+    """
+    def __init__(self, content:str=None):
+        self.name = tempfile.TemporaryFile().name
+        if content != None:
+            with open(self.name, 'w') as file:
+                file.write(content)
+
+    def read(self) -> str:
+        with open(self.name, 'r') as file:
+            return file.read()
+
+    def __str__(self):
+        return self.name
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        os.remove(self.name)
+        self.name=None
 
 class Command:
     """
@@ -92,7 +129,7 @@ class Command:
         return completed.stdout.strip('\r\n')
 
     @staticmethod
-    def run(command: List[str], network: str, input: str = None):
+    def run(command:List[str], network:str, input:str=None):
         """
         Run the specified command.
 

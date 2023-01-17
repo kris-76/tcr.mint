@@ -406,7 +406,6 @@ def mint_royalty_token(cardano: Cardano,
                        nft_metadata_file: str) -> str:
     """
     Mint a royalty token.
-
     """
 
     # Initialize the wallet
