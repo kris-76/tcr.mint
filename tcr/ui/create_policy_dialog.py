@@ -101,4 +101,4 @@ class CreatePolicyDialog(OkCancelDialog):
         return {'name': self.name_var.get(),
                 'wallet': self.wallet_var.get(),
                 'lock_date': self.lock_date,
-                'seconds': difference.total_seconds()}
+                'seconds': int(difference.total_seconds())}

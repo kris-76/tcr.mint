@@ -128,40 +128,32 @@ class BlockFrostNode:
             pycardano.Value.from_primitive([lovelace]))
         )
 
-        signed_tx = builder.build_and_sign([source.get_signing_key(idx=Wallet.AddressIndex.ROOT)],
-                                           change_address=address)
+        signed_tx = builder.build_and_sign(
+            [source.get_signing_key(idx=Wallet.AddressIndex.ROOT)],
+            change_address=address
+        )
         self.chain_context.submit_tx(signed_tx.to_cbor())
 
         return str(signed_tx.id)
 
-    def mint_royalty_token(self, policy:Policy, wallet:Wallet, royalty_address:str, rate:str) -> str:
-        nft = pycardano.MultiAsset.from_primitive(
-            {
-                policy.get_script().hash().payload:{
-                    b'': 1
-                }
-            }
-        )
+    # todo use specific input utxo
+    # automatically select output address
+    def mint_nft(
+        self,
+        policy:Policy,
+        metadata:dict,
+        output_address:str
+    ) -> str:
+        policy_id = policy.get_id()
+        multi_asset_primitive = {policy_id.payload:{}}
 
-        metadata = {
-#            721: {
-#                policy.get_script().hash().payload.hex(): {
-#                    '': {
-#                        'description': 'Royalty Token',
-#                        'name': 'Royalty Token',
-#                        "id": 0,
-#                    }
-#                }
-#            },
-            777: {
-                'rate': rate,
-                'addr': [royalty_address[0:64],
-                        royalty_address[64:]]
-            }
-        }
+        for item in metadata[721][policy_id.payload.hex()]:
+            multi_asset_primitive[policy_id.payload][item.encode('utf-8')] = 1
+
+        nft = pycardano.MultiAsset.from_primitive(multi_asset_primitive)
 
         builder = pycardano.TransactionBuilder(self.chain_context)
-        input_address = wallet.get_delegated_payment_address(idx=Wallet.AddressIndex.ROOT)
+        input_address = policy.get_wallet().get_delegated_payment_address(idx=Wallet.AddressIndex.ROOT)
         builder.add_input_address(input_address)
         builder.ttl = policy.get_ttl()
         builder.mint = nft
@@ -175,17 +167,47 @@ class BlockFrostNode:
         min_val = pycardano.min_lovelace(
             self.chain_context,
             output=pycardano.TransactionOutput(
-                address=input_address,
+                address=output_address,
                 amount=pycardano.Value(0, nft)
             )
         )
         builder.add_output(pycardano.TransactionOutput(
-            address=input_address,
+            address=output_address,
             amount=pycardano.Value(min_val, nft))
         )
+        signing_keys = [policy.get_wallet().get_signing_key(idx=Wallet.AddressIndex.ROOT)]
+        signing_keys.extend(policy.get_signing_keys())
         signed_tx = builder.build_and_sign(
-            [wallet.get_signing_key(idx=Wallet.AddressIndex.ROOT), policy.get_signing_key()],
-            change_address=input_address)
+            signing_keys,
+            change_address=input_address
+        )
+
         self.chain_context.submit_tx(signed_tx.to_cbor())
 
         return str(signed_tx.id)
+
+    def mint_royalty_token(
+        self,
+        policy:Policy,
+        royalty_address:str,
+        rate:str
+    ) -> str:
+        policy_id = policy.get_id()
+        metadata = {
+            721: {
+                policy_id.payload.hex(): {
+                    '':{}
+                }
+            },
+            777: {
+                'rate':rate,
+                'addr': royalty_address if len(royalty_address) <= 64
+                        else [royalty_address[i:i+64] for i in range(0, len(royalty_address), 64)]
+            }
+        }
+
+        return self.mint_nft(
+            policy,
+            metadata,
+            policy.get_wallet().get_payment_address(idx=Wallet.AddressIndex.ROOT)
+        )

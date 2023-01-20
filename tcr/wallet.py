@@ -35,13 +35,23 @@ import pycardano
 
 from pycardano.crypto.bip32 import HDWallet
 from pycardano import PaymentVerificationKey
-
+from pycardano import PaymentSigningKey
 from collections import namedtuple
 from tcr.command import Command
 
 logger = logging.getLogger('wallet')
 
 WalletSettings = namedtuple('Wallet', ['name', 'seed_phrase'])
+
+# def load_key_pair(base_dir, base_name):
+#    skey_path = f'{base_dir}/{base_name}.skey'
+#    vkey_path = f'{base_dir}/{base_name}.vkey'
+#
+#    if os.path.exists(skey_path):
+#        skey = PaymentSigningKey.load(skey_path)
+#        vkey = PaymentVerificationKey.from_signing_key(skey)
+#
+#    return skey, vkey
 
 
 class Wallet:
@@ -65,30 +75,34 @@ class Wallet:
         PRESALE = 2
         MUTATE_REQUEST = 3
 
-    def __init__(self, network: str, obj:dict):
+    def __init__(self, network: str, obj: dict):
         parameters = WalletSettings(**obj)
         self.name = parameters.name
         self.seed_phrase = parameters.seed_phrase
         self.network = Wallet.network_lookup[network.lower()]
 
-        self.hdwallet = HDWallet.from_mnemonic(self.seed_phrase)
-        self.hdwallet_stake = self.hdwallet.derive_from_path("m/1852'/1815'/0'/2/0")
-
+        self.hdwallet_root = HDWallet.from_mnemonic(self.seed_phrase)
+        self.hdwallet_stake = self.hdwallet_root.derive_from_path("m/1852'/1815'/0'/2/0")
         self.hdwallet_payment = []
         for idx in range(0, 4):
-            self.hdwallet_payment.append(self.hdwallet.derive_from_path(f"m/1852'/1815'/0'/0/{idx}"))
+            self.hdwallet_payment.append(
+                self.hdwallet_root.derive_from_path(f"m/1852'/1815'/0'/0/{idx}"))
             print(f'{self.name}[{idx}] = {self.get_delegated_payment_address(idx).encode()}')
 
     @staticmethod
-    def create_new( name:str, network:str):
+    def create_new(name: str, network: str):
         seed_phrase = HDWallet.generate_mnemonic()
-        return Wallet(network,
-                      dict(WalletSettings(name=name,
-                                          seed_phrase=seed_phrase)._asdict()))
+        return Wallet(
+            network,
+            dict(WalletSettings(name=name, seed_phrase=seed_phrase)._asdict())
+        )
 
     def serialize(self):
-        return dict(WalletSettings(name=self.name,
-                                   seed_phrase=self.seed_phrase)._asdict())
+        return dict(
+            WalletSettings(
+                name=self.name,
+                seed_phrase=self.seed_phrase)._asdict()
+        )
 
     def get_name(self) -> str:
         """
@@ -97,11 +111,29 @@ class Wallet:
 
         return self.name
 
-    def get_signing_key(self,
-                        idx:AddressIndex=AddressIndex.MINT) -> pycardano.PaymentExtendedSigningKey:
+    def get_root_signing_key(self) -> pycardano.PaymentExtendedSigningKey:
+        return pycardano.PaymentExtendedSigningKey.from_hdwallet(self.hdwallet_root)
+
+    def get_root_verification_key(self) -> pycardano.PaymentExtendedSigningKey:
+        signing_key = self.get_root_signing_key()
+        return pycardano.PaymentExtendedVerificationKey.from_signing_key(signing_key)
+
+    def get_signing_key(
+        self,
+        idx: AddressIndex = AddressIndex.MINT
+    ) -> pycardano.PaymentExtendedSigningKey:
         return pycardano.PaymentExtendedSigningKey.from_hdwallet(self.hdwallet_payment[idx])
 
-    def get_stake_signing_key(self):
+    def get_verification_key(
+        self,
+        idx: AddressIndex = AddressIndex.MINT
+    ) -> pycardano.PaymentExtendedSigningKey:
+        signing_key = self.get_signing_key(idx)
+        return pycardano.PaymentExtendedVerificationKey.from_signing_key(signing_key)
+
+    def get_stake_signing_key(
+        self
+    ) -> pycardano.PaymentExtendedSigningKey:
         return pycardano.PaymentExtendedSigningKey.from_hdwallet(self.hdwallet_stake)
 
     def get_stake_address(self) -> pycardano.Address:
@@ -109,15 +141,20 @@ class Wallet:
         @return pycardano.Address.  Call .encode() to convert to a string
         """
         stake_signing_key = self.get_stake_signing_key()
-        stake_vk = pycardano.PaymentExtendedVerificationKey.from_signing_key(stake_signing_key)
+        stake_vk = pycardano.PaymentExtendedVerificationKey.from_signing_key(
+            stake_signing_key)
 
-        addr = pycardano.Address(payment_part=None,
-                                 staking_part=stake_vk.hash(),
-                                 network=self.network)
+        addr = pycardano.Address(
+            payment_part=None,
+            staking_part=stake_vk.hash(),
+            network=self.network
+        )
         return addr
 
-    def get_payment_address(self,
-                            idx:AddressIndex=AddressIndex.MINT) -> pycardano.Address:
+    def get_payment_address(
+        self,
+        idx: AddressIndex = AddressIndex.MINT
+    ) -> pycardano.Address:
         """
         Get the payment address for the specified index.
 
@@ -127,15 +164,20 @@ class Wallet:
         """
 
         signing_key = self.get_signing_key(idx)
-        spend_vk = pycardano.PaymentExtendedVerificationKey.from_signing_key(signing_key)
+        spend_vk = pycardano.PaymentExtendedVerificationKey.from_signing_key(
+            signing_key)
 
-        addr = pycardano.Address(payment_part=spend_vk.hash(),
-                                 staking_part=None,
-                                 network=self.network)
+        addr = pycardano.Address(
+            payment_part=spend_vk.hash(),
+            staking_part=None,
+            network=self.network
+        )
         return addr
 
-    def get_delegated_payment_address(self,
-                                      idx:AddressIndex=AddressIndex.MINT) -> pycardano.Address:
+    def get_delegated_payment_address(
+        self,
+        idx: AddressIndex = AddressIndex.MINT
+    ) -> pycardano.Address:
         """
         Get the delegated payment address for the specified index.
 
@@ -145,12 +187,18 @@ class Wallet:
         """
 
         signing_key = self.get_signing_key(idx)
-        spend_vk = pycardano.PaymentExtendedVerificationKey.from_signing_key(signing_key)
+        spend_vk = pycardano.PaymentExtendedVerificationKey.from_signing_key(
+            signing_key
+        )
 
         stake_signing_key = self.get_stake_signing_key()
-        stake_vk = pycardano.PaymentExtendedVerificationKey.from_signing_key(stake_signing_key)
+        stake_vk = pycardano.PaymentExtendedVerificationKey.from_signing_key(
+            stake_signing_key
+        )
 
-        addr = pycardano.Address(payment_part=spend_vk.hash(),
-                                 staking_part=stake_vk.hash(),
-                                 network=self.network)
+        addr = pycardano.Address(
+            payment_part=spend_vk.hash(),
+            staking_part=stake_vk.hash(),
+            network=self.network
+        )
         return addr

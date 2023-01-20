@@ -33,7 +33,7 @@ class PolicyView(ctk.CTkFrame):
         self.nft_count = tk.StringVar()
 
         self.add_field(master=self, label='Policy ID:',
-                                    value=tk.StringVar(value=policy.get_id()),
+                                    value=tk.StringVar(value=policy.get_id_str()),
                                     row=0)
         self.add_field(master=self, label='Signature Key Hash:',
                                     value=tk.StringVar(value=policy.get_signature_key_hash()),
@@ -42,7 +42,7 @@ class PolicyView(ctk.CTkFrame):
                                     value=tk.StringVar(value=int(policy.get_before_slot())),
                                     row=2)
         self.add_field(master=self, label='Signing Wallet:',
-                                    value=tk.StringVar(value=policy.get_wallet()),
+                                    value=tk.StringVar(value=policy.get_wallet_name()),
                                     row=3)
         self.add_field(master=self, label='Royalty Token TX:',
                                     value=self.royalty_token_tx_hash,
@@ -86,22 +86,16 @@ class PolicyView(ctk.CTkFrame):
         if not dialog.is_ok():
             return
 
-        signing_wallet = Wallet(self.user.get_network(), self.user.get_wallet(self.policy.get_wallet()))
-        #self.node.transfer_ada(signing_wallet,
-        #                       'addr_test1qrdxjwwuaep8948c3sqvul47nhtg5nxgqc7wlahwmwqplelft0q70npx8e22rv02jedp8ztmjscqv04dw6pvuerfmnmq2cn5zn',
-        #                       1500000)
-
         royalty_address = dialog.get_result()['address']
         rate = dialog.get_result()['rate']
-        tx_hash = self.node.mint_royalty_token(self.policy, signing_wallet, royalty_address, rate)
-        print(f'Royalty Mint TX Hash = {tx_hash}')
-        self.royalty_percent.set(float(dialog.get_result()['percent'])*100)
+        tx_hash = self.node.mint_royalty_token(self.policy, royalty_address, rate)
+        self.royalty_percent.set(float(dialog.get_result()['rate'])*100)
         self.royalty_address.set(dialog.get_result()['address'])
         self.nft_count.set('1')
         self.royalty_token_tx_hash.set(tx_hash)
 
     def synchronize_policy(self):
-        policy_id = self.policy.get_id()
+        policy_id = self.policy.get_id_str()
         initialized = False
 
         while not initialized:
@@ -183,7 +177,7 @@ class PoliciesFrame(ctk.CTkFrame):
         self.node = node
         self.count = 0
         self.current_slot = 0
-        self.policy_views = [PolicyView(self, self.node, self.user, Policy(self.user.get_network(), obj)) for obj in self.user.get_policies()]
+        self.policy_views = [PolicyView(self, self.node, self.user, Policy(self.user, obj)) for obj in self.user.get_policies()]
 
         self.columnconfigure(index=0, weight=0)
         self.rowconfigure(index=0, weight=1)
@@ -240,7 +234,7 @@ class PoliciesFrame(ctk.CTkFrame):
                     tk.messagebox.showerror('Error', 'Duplicate Policy Name')
                     return
 
-            new_policy = Policy.create_new(self.user.get_network(),
+            new_policy = Policy.create_new(self.user,
                                            name, wallet,
                                            before_slot=self.current_slot + seconds)
             self.policy_views.append(PolicyView(self, self.node, self.user, new_policy))
