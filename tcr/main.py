@@ -43,11 +43,11 @@ def update_status_thread(node, application: GuiMain):
     while True:
         status = node.get_status()
         timestamp = int(time.time())
-        print(f'    Healthy = {status.is_healthy}')
-        print(f'     Height = {status.height}')
-        print(f'   Tip Slot = {status.slot}')
-        print(f'Server Time = {int(status.server_time/1000)}')
-        print(f' Local Time = {timestamp}')
+        #print(f'    Healthy = {status.is_healthy}')
+        #print(f'     Height = {status.height}')
+        #print(f'   Tip Slot = {status.slot}')
+        #print(f'Server Time = {int(status.server_time/1000)}')
+        #print(f' Local Time = {timestamp}')
         application.update_status(healthy=status.is_healthy, slot=status.slot)
         time.sleep(15)
 
@@ -82,8 +82,3 @@ if __name__ == '__main__':
         print('EXCEPTION: {}'.format(e))
         print('')
         traceback.print_exc()
-
-#preprod-1[0] = addr_test1qprr47wcf64efxt6kwnhptzy9ycft76s730vhp9sc4k90xhft0q70npx8e22rv02jedp8ztmjscqv04dw6pvuerfmnmqqyzkh8
-#preprod-1[1] = addr_test1qzt3azgw9jx6ny8hzqh7lvndhmv4hlw2kw7729xpylpmmx8ft0q70npx8e22rv02jedp8ztmjscqv04dw6pvuerfmnmqdnxked
-#preprod-1[2] = addr_test1qrdn4mrl5jmpgjkz2dnlhxug7m66slqrr396uxnueldvqvlft0q70npx8e22rv02jedp8ztmjscqv04dw6pvuerfmnmq80a0as
-#preprod-1[3] = addr_test1qrdxjwwuaep8948c3sqvul47nhtg5nxgqc7wlahwmwqplelft0q70npx8e22rv02jedp8ztmjscqv04dw6pvuerfmnmq2cn5zn

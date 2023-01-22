@@ -32,7 +32,6 @@ from tcr.project_data import ProjectData
 class CreatePolicyDialog(OkCancelDialog):
     def __init__(self, parent, user:ProjectData):
         self.user = user
-        print(f'create policy, user = {user}')
         OkCancelDialog.__init__(self, parent, 'Policies: Create New Policy ID')
 
     def body(self, master):

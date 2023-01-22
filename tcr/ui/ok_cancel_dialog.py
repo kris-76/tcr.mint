@@ -14,7 +14,7 @@ class OkCancelDialog(ctk.CTkToplevel):
 
         self.title(title)
         self.resizable(height=True, width=True)
-        self.grab_set()
+        self.grab_set() # makes it modal
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)

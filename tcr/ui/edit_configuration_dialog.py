@@ -32,7 +32,7 @@ class EditConfigurationDialog(ctk.CTkToplevel):
     def configure_root(self):
         self.title('NFT Mint: Settings')
         self.resizable(height=False, width=True)
-        self.grab_set()
+        self.grab_set() # makes it modal
 
         self.columnconfigure(0, weight=0)
         self.columnconfigure(1, weight=10)

@@ -10,6 +10,7 @@ from functools import partial
 from tcr.project_data import ProjectData
 from tcr.configuration import Configuration
 from tcr.wallet import Wallet
+from tcr.ui.list_frame import ListFrame
 import blockfrost
 
 class WalletView(ctk.CTkFrame):
@@ -44,55 +45,6 @@ class WalletView(ctk.CTkFrame):
     def get_name(self):
         return self.wallet.get_name()
 
-    def synchronize_wallet(self):
-        while True:
-            try:
-                for idx in range(0, 4):
-                    address = self.wallet.get_delegated_payment_address(idx)
-                    try:
-                        utxos = self.node.get_utxos(address)
-                        for utxo in utxos:
-                            tx_hash = utxo.tx_hash
-                            amount = utxo.amount[0].quantity
-                            self.hands_treeview.insert('', 'end', iid=None, text='', values=[tx_hash, amount], open=False)
-                    except blockfrost.utils.ApiError as ae:
-                        if ae.status_code == 404:
-                            print(f'No UTXOs: {address}')
-            except Exception as e:
-                print(f'Exception: {e}')
-            time.sleep(60)
-
-class WalletsFrame(ctk.CTkFrame):
-    def wallet_selected_event(self, lb, arg):
-        if len(lb.curselection()) == 0:
-            return
-
-        name = lb.get(lb.curselection()[0])
-        print(f'selected = {name}')
-
-    def create_wallet_list(self, parent):
-        frame = ctk.CTkFrame(master=parent)
-
-        wallets_lb = tk.Listbox(master=frame, selectmode=tk.SINGLE)
-        for view in self.wallet_views:
-            self.count += 1
-            wallets_lb.insert(self.count, view.get_name())
-
-        wallets_lb.grid(column=0, row=0, padx=0, pady=0, sticky=tk.NS)
-        frame.rowconfigure(index=0, weight=1)
-
-        wallets_lb.bind('<<ListboxSelect>>', partial(self.wallet_selected_event, wallets_lb))
-
-        button_frame = ctk.CTkFrame(master=frame)
-        delete_button = ctk.CTkButton(master=button_frame, text='-', width=28, height=28, command=partial(self.delete_wallet, wallets_lb))
-        add_button = ctk.CTkButton(master=button_frame, text='+', width=28, height=28, command=partial(self.add_wallet, wallets_lb))
-        delete_button.grid(column=0, row=0, padx=0, pady=0)
-        add_button.grid(column=1, row=0, padx=0, pady=0)
-        button_frame.grid(column=0, row=1, padx=0, pady=0, sticky=tk.E)
-
-        return frame
-
-
     def treeview_sort_column(self, tv, col, reverse):
         l = [(tv.set(k, col), k) for k in tv.get_children('')]
         l.sort(reverse=reverse)
@@ -104,47 +56,82 @@ class WalletsFrame(ctk.CTkFrame):
         # reverse sort next time
         tv.heading(col, command=lambda _col=col: self.treeview_sort_column(tv, _col, not reverse))
 
+    def synchronize_wallet(self):
+        while True:
+            current_utxos = []
+            try:
+                for idx in range(0, 4):
+                    address = self.wallet.get_delegated_payment_address(idx)
+                    try:
+                        utxos = self.node.get_utxos(address)
+                        current_utxos.extend(utxos)
+                    except blockfrost.utils.ApiError as ae:
+                        pass
 
+                    address = self.wallet.get_payment_address(idx)
+                    try:
+                        utxos = self.node.get_utxos(address)
+                        current_utxos.extend(utxos)
+                    except blockfrost.utils.ApiError as ae:
+                        pass
+            except Exception as e:
+                print(f'Exception: {e}')
+
+            # if a current utxo isn't in the view, add it
+            for utxo in current_utxos:
+                found = False
+                children = self.hands_treeview.get_children()
+                for child in children:
+                    values = self.hands_treeview.item(child)['values']
+                    if utxo.tx_hash == values[0]:
+                        found = True
+                        break
+
+                if not found:
+                    tx_hash = utxo.tx_hash
+                    amount = utxo.amount[0].quantity
+                    self.hands_treeview.insert('', 'end', iid=None, text='', values=[tx_hash, amount], open=False)
+
+            # if a utxo is in the view but not current, remove it
+            children = self.hands_treeview.get_children()
+            for child in children:
+                values = self.hands_treeview.item(child)['values']
+                found = False
+                for utxo in current_utxos:
+                    if utxo.tx_hash == values[0]:
+                        found = True
+                        break
+                if not found:
+                    self.hands_treeview.detach(child)
+
+            time.sleep(30)
+
+class WalletsFrame(ListFrame):
     def __init__(self, parent, settings:Configuration, user:ProjectData, node):
-        ctk.CTkFrame.__init__(self, parent)
+        super().__init__(parent)
 
         self.settings = settings
         self.user = user
         self.node = node
-        self.count = 0
-        self.wallet_views = [WalletView(self, Wallet(user.get_network(), obj), self.node) for obj in self.user.get_wallets()]
 
-        self.columnconfigure(index=0, weight=0)
-        self.rowconfigure(index=0, weight=1)
-        self.columnconfigure(index=1, weight=1)
+    def create_views(self):
+        return [WalletView(self, Wallet(self.user.get_network(), obj), self.node)
+                for obj in self.user.get_wallets()]
 
-        left_frame = self.create_wallet_list(self)
-        left_frame.grid(column=0, row=0, padx=0, pady=0, sticky=tk.NS)
-
-        if len(self.wallet_views) > 0:
-            right_frame = self.wallet_views[0]
-        else:
-            right_frame = ctk.CTkFrame(master=self)
-        right_frame.grid(column=1, row=0, padx=0, pady=0, sticky=tk.NSEW)
-
-    def delete_wallet(self, lb:tk.Listbox):
-        if len(lb.curselection()) == 0:
+    def add_item(self):
+        dialog = ctk.CTkInputDialog(text="Enter Wallet Name:",
+                                    title="Create New Wallet")
+        name = dialog.get_input()
+        if name == None or len(name) == 0:
             return
 
-        name = lb.get(lb.curselection()[0])
-        lb.delete(lb.curselection()[0])
-        self.user.delete_wallet(name)
+        if self.is_view_existing(name) != False:
+            tk.messagebox.showerror('Error', 'Duplicate Wallet Name')
+            return
 
-    def add_wallet(self, lb:tk.Listbox):
-        dialog = ctk.CTkInputDialog(text="Enter Wallet Name:", title="Create New Wallet")
-        name = dialog.get_input()
-        if len(name) > 0:
-            for view in self.wallet_views:
-                if view.get_name() == name:
-                    tk.messagebox.showerror('Error', 'Duplicate Wallet Name')
-                    return
-            new_wallet = Wallet.create_new(name, self.user.get_network())
-            self.wallet_views.append(WalletView(self, new_wallet, self.node))
-            self.count += 1
-            lb.insert(self.count, new_wallet.get_name())
-            self.user.add_wallet(new_wallet.serialize())
+        new_wallet = Wallet.create_new(name, self.user.get_network())
+        view = WalletView(self, new_wallet, self.node)
+        return view
+
+    def delete_item(self, name):
+        self.user.delete_wallet(name)

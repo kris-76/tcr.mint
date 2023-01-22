@@ -27,32 +27,17 @@ Author: SuperKK
 """
 
 from typing import Tuple
-import os
 import logging
-from enum import Enum
 from enum import IntEnum
 import pycardano
-
+from tcr.project_data import ProjectData
 from pycardano.crypto.bip32 import HDWallet
-from pycardano import PaymentVerificationKey
-from pycardano import PaymentSigningKey
 from collections import namedtuple
 from tcr.command import Command
 
 logger = logging.getLogger('wallet')
 
 WalletSettings = namedtuple('Wallet', ['name', 'seed_phrase'])
-
-# def load_key_pair(base_dir, base_name):
-#    skey_path = f'{base_dir}/{base_name}.skey'
-#    vkey_path = f'{base_dir}/{base_name}.vkey'
-#
-#    if os.path.exists(skey_path):
-#        skey = PaymentSigningKey.load(skey_path)
-#        vkey = PaymentVerificationKey.from_signing_key(skey)
-#
-#    return skey, vkey
-
 
 class Wallet:
     """
@@ -62,15 +47,8 @@ class Wallet:
     Commands based on https://github.com/input-output-hk/cardano-addresses
     """
 
-    network_lookup = {
-        'mainnet': pycardano.Network.MAINNET,
-        'preprod': pycardano.Network.TESTNET,
-        'preview': pycardano.Network.TESTNET,
-        'testnet': pycardano.Network.TESTNET
-    }
-
     class AddressIndex(IntEnum):
-        ROOT = 0
+        PRIMARY = 0
         MINT = 1
         PRESALE = 2
         MUTATE_REQUEST = 3
@@ -79,7 +57,7 @@ class Wallet:
         parameters = WalletSettings(**obj)
         self.name = parameters.name
         self.seed_phrase = parameters.seed_phrase
-        self.network = Wallet.network_lookup[network.lower()]
+        self.network = ProjectData.NetworkLookup[network.lower()]
 
         self.hdwallet_root = HDWallet.from_mnemonic(self.seed_phrase)
         self.hdwallet_stake = self.hdwallet_root.derive_from_path("m/1852'/1815'/0'/2/0")
@@ -87,7 +65,8 @@ class Wallet:
         for idx in range(0, 4):
             self.hdwallet_payment.append(
                 self.hdwallet_root.derive_from_path(f"m/1852'/1815'/0'/0/{idx}"))
-            print(f'{self.name}[{idx}] = {self.get_delegated_payment_address(idx).encode()}')
+            #print(f'{self.name}[{idx}] = {self.get_delegated_payment_address(idx).encode()}')
+            #print(f'{self.name}[{idx}] = {self.get_payment_address(idx).encode()}')
 
     @staticmethod
     def create_new(name: str, network: str):
@@ -123,6 +102,17 @@ class Wallet:
         idx: AddressIndex = AddressIndex.MINT
     ) -> pycardano.PaymentExtendedSigningKey:
         return pycardano.PaymentExtendedSigningKey.from_hdwallet(self.hdwallet_payment[idx])
+
+    def get_address_signing_key(
+        self,
+        address: str
+    ) -> pycardano.PaymentExtendedSigningKey:
+        print(f'find signing key for: {address}')
+        for idx in range(0, 4):
+            if self.get_delegated_payment_address(idx).encode() == address or self.get_payment_address(idx).encode() == address:
+                return self.get_signing_key(idx)
+
+        return None
 
     def get_verification_key(
         self,

@@ -51,14 +51,15 @@ class BlockFrostNode:
     }
 
     def __init__(self, network:ProjectData.Network, api_key:str):
-        self.api = BlockFrostApi(project_id=api_key,
-                                 base_url=BlockFrostNode.network_lookup[network]['url'])
+        self.api = BlockFrostApi(
+            project_id=api_key,
+            base_url=BlockFrostNode.network_lookup[network]['url']
+        )
         self.chain_context = pycardano.BlockFrostChainContext(
             project_id=api_key,
             network=BlockFrostNode.network_lookup[network]['network'],
             base_url=BlockFrostNode.network_lookup[network]['url'],
         )
-
 
     def get_status(self) -> Status:
         try:
@@ -118,27 +119,34 @@ class BlockFrostNode:
     def get_transaction_metadata(self, tx_hash:str):
         return self.api.transaction_metadata(tx_hash)
 
-    def transfer_ada(self, source:Wallet, destination:str, lovelace:int) -> str:
+    def transfer_ada(self, source:Wallet, output_address:str, lovelace:int) -> str:
         builder = pycardano.TransactionBuilder(self.chain_context)
-        address = source.get_delegated_payment_address(idx=Wallet.AddressIndex.ROOT)
+        address = source.get_payment_address(idx=Wallet.AddressIndex.PRIMARY)
 
         builder.add_input_address(address)
         builder.add_output(pycardano.TransactionOutput(
-            pycardano.Address.from_primitive(destination),
+            pycardano.Address.from_primitive(output_address),
             pycardano.Value.from_primitive([lovelace]))
         )
 
         signed_tx = builder.build_and_sign(
-            [source.get_signing_key(idx=Wallet.AddressIndex.ROOT)],
-            change_address=address
+            [source.get_signing_key(idx=Wallet.AddressIndex.PRIMARY)],
+            change_address=address,
+            merge_change=True
         )
         self.chain_context.submit_tx(signed_tx.to_cbor())
 
         return str(signed_tx.id)
 
-    # todo use specific input utxo
-    # automatically select output address
-    def mint_nft(
+    def mint_nft_to_external(
+        self,
+        policy:Policy,
+        metadata:dict,
+        payment_utxo
+    ) -> str:
+        return None
+
+    def mint_nft_to_self(
         self,
         policy:Policy,
         metadata:dict,
@@ -153,7 +161,9 @@ class BlockFrostNode:
         nft = pycardano.MultiAsset.from_primitive(multi_asset_primitive)
 
         builder = pycardano.TransactionBuilder(self.chain_context)
-        input_address = policy.get_wallet().get_delegated_payment_address(idx=Wallet.AddressIndex.ROOT)
+        input_address = policy.get_wallet().get_payment_address(
+            idx=Wallet.AddressIndex.PRIMARY
+        )
         builder.add_input_address(input_address)
         builder.ttl = policy.get_ttl()
         builder.mint = nft
@@ -175,11 +185,57 @@ class BlockFrostNode:
             address=output_address,
             amount=pycardano.Value(min_val, nft))
         )
-        signing_keys = [policy.get_wallet().get_signing_key(idx=Wallet.AddressIndex.ROOT)]
+        signing_keys = [
+            policy.get_wallet().get_signing_key(idx=Wallet.AddressIndex.PRIMARY)
+        ]
         signing_keys.extend(policy.get_signing_keys())
         signed_tx = builder.build_and_sign(
             signing_keys,
-            change_address=input_address
+            change_address=input_address,
+            merge_change=True
+        )
+
+        self.chain_context.submit_tx(signed_tx.to_cbor())
+
+        return str(signed_tx.id)
+
+    def burn_nft(
+        self,
+        policy:Policy,
+        name:str
+    ) -> str:
+        policy_id = policy.get_id()
+        nft = pycardano.MultiAsset.from_primitive({
+            policy_id.payload: {
+                name.encode('utf-8'): -1
+            }
+        })
+
+        asset_name = name.encode('ascii').hex()
+        asset = policy_id.payload.hex() + asset_name
+        owners = self.api.asset_addresses(asset)
+        if owners == None or len(owners) == 0:
+            return None
+
+        builder = pycardano.TransactionBuilder(self.chain_context)
+        input_address = pycardano.Address.from_primitive(owners[0].address)
+        builder.add_input_address(input_address)
+        builder.add_input_address(
+            policy.get_wallet().get_delegated_payment_address(
+                idx=Wallet.AddressIndex.PRIMARY
+            )
+        )
+        builder.ttl = policy.get_ttl()
+        builder.mint = nft
+        builder.native_scripts = [policy.get_script()]
+        signing_keys = [
+            policy.get_wallet().get_address_signing_key(input_address.encode()
+        )]
+        signing_keys.extend(policy.get_signing_keys())
+        signed_tx = builder.build_and_sign(
+            signing_keys,
+            change_address=input_address,
+            merge_change=True
         )
 
         self.chain_context.submit_tx(signed_tx.to_cbor())
@@ -196,18 +252,20 @@ class BlockFrostNode:
         metadata = {
             721: {
                 policy_id.payload.hex(): {
-                    '':{}
+                    '': {}
                 }
             },
             777: {
-                'rate':rate,
+                'rate': rate,
                 'addr': royalty_address if len(royalty_address) <= 64
                         else [royalty_address[i:i+64] for i in range(0, len(royalty_address), 64)]
             }
         }
 
-        return self.mint_nft(
+        return self.mint_nft_to_self(
             policy,
             metadata,
-            policy.get_wallet().get_payment_address(idx=Wallet.AddressIndex.ROOT)
+            policy.get_wallet().get_payment_address(
+                idx=Wallet.AddressIndex.PRIMARY
+            )
         )

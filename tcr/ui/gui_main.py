@@ -8,6 +8,8 @@ from tcr.configuration import Configuration
 from tcr.ui.edit_configuration_dialog import EditConfigurationDialog
 from tcr.ui.wallets_frame import WalletsFrame
 from tcr.ui.policies_frame import PoliciesFrame
+from tcr.ui.projects_frame import ProjectsFrame
+from tcr.project_data import ProjectData
 
 class GuiMain(ctk.CTk):
     def create_menu(self):
@@ -48,6 +50,12 @@ class GuiMain(ctk.CTk):
         slot_value = ctk.CTkLabel(master=status_row, textvariable=self.current_slot)
         slot_value.grid(column=2, row=0, padx=0, pady=0)
 
+        slot_label = ctk.CTkLabel(master=status_row, text='Network:')
+        slot_label.grid(column=3, row=0, padx=5, pady=0)
+
+        slot_value = ctk.CTkLabel(master=status_row, text=self.user.get_network())
+        slot_value.grid(column=4, row=0, padx=0, pady=0)
+
     def create_tab_views(self):
         tabview = ctk.CTkTabview(self)
         tabview.grid(column=0, row=1, padx=0, pady=0, sticky=tk.NSEW)
@@ -64,7 +72,7 @@ class GuiMain(ctk.CTk):
         projects_tab.rowconfigure(index=0, weight=1)
         projects_tab.columnconfigure(index=0, weight=1)
 
-        tabview.set("Policies")
+        tabview.set("Projects")
 
         self.wallets_frame = WalletsFrame(wallets_tab, self.settings, self.user, self.node)
         self.wallets_frame.grid(column=0, row=0, padx=0, pady=0, sticky=tk.NSEW)
@@ -72,11 +80,10 @@ class GuiMain(ctk.CTk):
         self.policies_frame = PoliciesFrame(policies_tab, self.settings, self.user, self.node)
         self.policies_frame.grid(column=0, row=0, padx=0, pady=0, sticky=tk.NSEW)
 
-        #projects_frame = ProjectsFrame(policies_tab, self.settings, self.user)
-        #projects_frame.grid(column=0, row=0, padx=0, pady=0, sticky=tk.NSEW)
+        projects_frame = ProjectsFrame(projects_tab, self.user)
+        projects_frame.grid(column=0, row=0, padx=0, pady=0, sticky=tk.NSEW)
 
-
-    def __init__(self, settings, user, node):
+    def __init__(self, settings:Configuration, user:ProjectData, node):
         super().__init__()
 
         self.settings = settings
@@ -101,7 +108,7 @@ class GuiMain(ctk.CTk):
         self.option_add('*font', 'lucida 26')
         ctk.set_appearance_mode("system")
         ctk.set_default_color_theme("dark-blue")
-        self.geometry('1000x600')
+        self.geometry('1150x600')
 
         self.title('TCR: NFT Mint')
         self.create_menu()

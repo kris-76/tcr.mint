@@ -28,45 +28,18 @@ Author: SuperKK
 
 from collections import namedtuple
 
-from tcr.command import Command
-from tcr.command import TempFile
 from tcr.wallet import Wallet
 from tcr.project_data import ProjectData
-import os
 import logging
 
 from pycardano.crypto.bip32 import HDWallet
-from pycardano import ScriptPubkey
-from pycardano import InvalidHereAfter
-from pycardano import ScriptAll
-from pycardano import ScriptHash
 import pycardano
-from pycardano import PaymentSigningKey
-from pycardano import PaymentVerificationKey
-from pycardano import PaymentKeyPair
 
 logger = logging.getLogger('policy')
 
 PolicySettings = namedtuple('PolicySettings', ['name', 'wallet', 'seed_phrase', 'before_slot'])
 
-#def load_key_pair(base_dir, base_name):
-#    skey_path = f'{base_dir}/{base_name}.skey'
-#    vkey_path = f'{base_dir}/{base_name}.vkey'
-#
-#    if os.path.exists(skey_path):
-#        skey = PaymentSigningKey.load(skey_path)
-#        vkey = PaymentVerificationKey.from_signing_key(skey)
-#
-#    return skey, vkey
-
 class Policy:
-    network_lookup = {
-        'mainnet': pycardano.Network.MAINNET,
-        'preprod': pycardano.Network.TESTNET,
-        'preview': pycardano.Network.TESTNET,
-        'testnet': pycardano.Network.TESTNET
-    }
-
     def __init__(self, user:ProjectData, obj:dict):
         parameters = PolicySettings(**obj)
 
@@ -74,18 +47,17 @@ class Policy:
         self.wallet = Wallet(user.get_network(), user.get_wallet(parameters.wallet))
         self.seed_phrase = parameters.seed_phrase
         self.before_slot = int(parameters.before_slot)
-        self.network = Policy.network_lookup[user.get_network().lower()]
+        self.network = ProjectData.NetworkLookup[user.get_network().lower()]
 
         self.hdwallet_root = HDWallet.from_mnemonic(self.seed_phrase)
-        #self.hdwallet_child = self.hdwallet_root.derive_from_path("m/1852'/1815'/0'/0/0")
         policy_vkey = pycardano.PaymentExtendedVerificationKey.from_signing_key(self.get_signing_key())
 
-        pub_key_policy = ScriptPubkey(policy_vkey.hash())
-        pub_key_wallet = ScriptPubkey(self.wallet.get_root_verification_key().hash())
+        pub_key_policy = pycardano.ScriptPubkey(policy_vkey.hash())
+        pub_key_wallet = pycardano.ScriptPubkey(self.wallet.get_root_verification_key().hash())
 
-        must_before_slot = InvalidHereAfter(self.before_slot)
+        must_before_slot = pycardano.InvalidHereAfter(self.before_slot)
         self.ttl = must_before_slot.after
-        self.script = ScriptAll([pub_key_policy, pub_key_wallet, must_before_slot])
+        self.script = pycardano.ScriptAll([pub_key_policy, pub_key_wallet, must_before_slot])
         self.signature_key_hash = pub_key_policy.key_hash.payload.hex()
 
     def get_name(self):
@@ -106,10 +78,10 @@ class Policy:
     def get_ttl(self):
         return self.ttl
 
-    def get_script(self) -> ScriptAll:
+    def get_script(self) -> pycardano.ScriptAll:
         return self.script
 
-    def get_id(self) -> ScriptHash:
+    def get_id(self) -> pycardano.ScriptHash:
         return self.script.hash()
 
     def get_id_str(self) -> str:
@@ -124,7 +96,12 @@ class Policy:
         return [self.get_signing_key(), self.wallet.get_root_signing_key()]
 
     @staticmethod
-    def create_new(user:ProjectData, name:str, wallet:str, before_slot: int):
+    def create_new(
+        user:ProjectData,
+        name:str,
+        wallet:str,
+        before_slot: int
+    ):
         seed_phrase = HDWallet.generate_mnemonic()
         parameters = dict(PolicySettings(name=name,
                                          wallet=wallet,

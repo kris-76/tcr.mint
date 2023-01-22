@@ -3,6 +3,7 @@ from cryptography.fernet import Fernet
 import base64
 import json
 from enum import StrEnum
+from pycardano import Network as PycNetwork
 
 class ProjectData:
     class Network(StrEnum):
@@ -14,9 +15,18 @@ class ProjectData:
 
     class Constants(StrEnum):
         NAME = 'name'
-        WALLETS = 'wallets'
-        POLICIES = 'policies'
         NETWORK = 'network'
+        POLICIES = 'policies'
+        PROJECTS = 'projects'
+        WALLETS = 'wallets'
+
+    NetworkLookup = {
+        Network.NONE: None,
+        Network.MAINNET: PycNetwork.MAINNET,
+        Network.PREPROD: PycNetwork.TESTNET,
+        Network.PREVIEW: PycNetwork.TESTNET,
+        Network.TESTNET: PycNetwork.TESTNET,
+    }
 
     def __init__(self, file:str, key:str):
         self.data = {}
@@ -79,6 +89,16 @@ class ProjectData:
                 self.data[ProjectData.Constants.WALLETS].remove(w)
                 break
 
+    def get_policy(self, name:str) -> dict:
+        if not ProjectData.Constants.POLICIES in self.data:
+            self.data[ProjectData.Constants.POLICIES] = []
+
+        for policy in self.data[ProjectData.Constants.POLICIES]:
+            if policy['name'] == name:
+                return policy
+
+        return None
+
     def get_policies(self):
         if not ProjectData.Constants.POLICIES in self.data:
             self.data[ProjectData.Constants.POLICIES] = []
@@ -92,4 +112,29 @@ class ProjectData:
         for p in self.data[ProjectData.Constants.POLICIES]:
             if p[ProjectData.Constants.NAME] == name:
                 self.data[ProjectData.Constants.POLICIES].remove(p)
+                break
+
+    def get_projects(self):
+        if not ProjectData.Constants.PROJECTS in self.data:
+            self.data[ProjectData.Constants.PROJECTS] = []
+
+        return self.data[ProjectData.Constants.PROJECTS]
+
+    def get_project(self, name:str) -> dict:
+        if not ProjectData.Constants.PROJECTS in self.data:
+            self.data[ProjectData.Constants.PROJECTS] = []
+
+        for project in self.data[ProjectData.Constants.PROJECTS]:
+            if project['name'] == name:
+                return project
+
+        return None
+
+    def add_project(self, obj):
+        self.data[ProjectData.Constants.PROJECTS].append(obj)
+
+    def delete_project(self, name):
+        for p in self.data[ProjectData.Constants.POLIPROJECTSCIES]:
+            if p[ProjectData.Constants.NAME] == name:
+                self.data[ProjectData.Constants.PROJECTS].remove(p)
                 break
